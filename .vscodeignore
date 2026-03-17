@@ -1,0 +1,39 @@
+# Source files
+src/**
+tsconfig.json
+.eslintrc.json
+
+# Test files
+**/*.test.ts
+**/*.pbt.test.ts
+**/__mocks__/**
+jest.config.js
+
+# Build artifacts
+node_modules/**
+.vscode-test/**
+
+# Development files
+.gitignore
+.git/**
+.github/**
+
+# Documentation (keep README and CHANGELOG)
+# None to exclude
+
+# Spec files
+.kiro/**
+
+# Package manager files
+package-lock.json
+yarn.lock
+
+# Editor files
+.vscode/**
+*.code-workspace
+
+# Misc
+.DS_Store
+*.log
+*.vsix
+logo.png

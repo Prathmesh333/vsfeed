@@ -1,0 +1,265 @@
+{
+  "name": "vsfeed",
+  "displayName": "VSFeed",
+  "description": "Doomscroll without leaving your code. A context-aware social feed for idle moments in Visual Studio Code.",
+  "version": "1.0.0",
+  "publisher": "prathamesh-nikam",
+  "author": {
+    "name": "Prathamesh Nikam"
+  },
+  "icon": "logo-small.jpg",
+  "license": "MIT",
+  "keywords": [
+    "feed",
+    "integrated-browser",
+    "focus",
+    "productivity",
+    "idle",
+    "break",
+    "timer",
+    "distraction",
+    "social media",
+    "shortcuts",
+    "doomscroll"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vsfeed.togglePanel",
+        "title": "VSFeed: Toggle Feed Panel"
+      },
+      {
+        "command": "vsfeed.activateFocusMode",
+        "title": "VSFeed: Activate Focus Mode"
+      },
+      {
+        "command": "vsfeed.closePanel",
+        "title": "VSFeed: Close Feed Panel"
+      },
+      {
+        "command": "vsfeed.navigateBack",
+        "title": "VSFeed: Navigate Back"
+      },
+      {
+        "command": "vsfeed.navigateForward",
+        "title": "VSFeed: Navigate Forward"
+      },
+      {
+        "command": "vsfeed.addCustomShortcut",
+        "title": "VSFeed: Add Custom Shortcut"
+      },
+      {
+        "command": "vsfeed.removeCustomShortcut",
+        "title": "VSFeed: Remove Custom Shortcut"
+      },
+      {
+        "command": "vsfeed.clearCookies",
+        "title": "VSFeed: Clear Cookies"
+      },
+      {
+        "command": "vsfeed.resetState",
+        "title": "VSFeed: Reset Extension State"
+      },
+      {
+        "command": "embeddedBrowser.openPanel",
+        "title": "Open VSFeed Feed Panel"
+      },
+      {
+        "command": "embeddedBrowser.startFocusMode",
+        "title": "Start VSFeed Focus Mode"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vsfeed.togglePanel",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b"
+      },
+      {
+        "command": "vsfeed.activateFocusMode",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f"
+      },
+      {
+        "command": "vsfeed.closePanel",
+        "key": "escape",
+        "when": "activeWebviewPanelId == 'vsfeedBrowser'"
+      },
+      {
+        "command": "vsfeed.navigateBack",
+        "key": "alt+left",
+        "mac": "cmd+left",
+        "when": "activeWebviewPanelId == 'vsfeedBrowser'"
+      },
+      {
+        "command": "vsfeed.navigateForward",
+        "key": "alt+right",
+        "mac": "cmd+right",
+        "when": "activeWebviewPanelId == 'vsfeedBrowser'"
+      }
+    ],
+    "configuration": {
+      "title": "VSFeed",
+      "properties": {
+        "vsfeed.focusMode.defaultDurationMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "maximum": 60,
+          "description": "Default duration for focus mode sessions in minutes (1-60)"
+        },
+        "vsfeed.focusMode.enableBlurEffect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply blur effect to browser panel when session timer expires"
+        },
+        "vsfeed.focusMode.enableActivityPausing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically pause focus mode timer when coding activity is detected"
+        },
+        "vsfeed.breakSuggestions.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show break suggestions after long coding sessions"
+        },
+        "vsfeed.breakSuggestions.codingThresholdMinutes": {
+          "type": "number",
+          "default": 90,
+          "minimum": 30,
+          "maximum": 180,
+          "description": "Duration of continuous coding before suggesting a break in minutes (30-180)"
+        },
+        "vsfeed.contentFilter.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable content filtering to hide distracting sections of websites"
+        },
+        "vsfeed.contentFilter.customRules": {
+          "type": "array",
+          "default": [],
+          "description": "Custom content filter rules per domain",
+          "items": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "type": "string",
+                "description": "Domain name (e.g., 'instagram.com')"
+              },
+              "selectors": {
+                "type": "array",
+                "description": "CSS selectors to hide",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "domain",
+              "selectors"
+            ]
+          }
+        },
+        "vsfeed.performance.preferMobileUrls": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prefer mobile-optimized URLs for faster loading"
+        },
+        "vsfeed.performance.memoryLimitMB": {
+          "type": "number",
+          "default": 200,
+          "minimum": 50,
+          "maximum": 1000,
+          "description": "Memory limit for browser panel in megabytes (50-1000)"
+        },
+        "vsfeed.platformShortcuts": {
+          "type": "array",
+          "default": [
+            {
+              "name": "Instagram",
+              "url": "https://www.instagram.com",
+              "useMobileUrl": true
+            },
+            {
+              "name": "Twitter/X",
+              "url": "https://twitter.com",
+              "useMobileUrl": true
+            },
+            {
+              "name": "Reddit",
+              "url": "https://www.reddit.com",
+              "useMobileUrl": true
+            },
+            {
+              "name": "YouTube Shorts",
+              "url": "https://www.youtube.com/shorts",
+              "useMobileUrl": true
+            },
+            {
+              "name": "Hacker News",
+              "url": "https://news.ycombinator.com",
+              "useMobileUrl": false
+            }
+          ],
+          "description": "Platform shortcuts for quick access",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name for the shortcut"
+              },
+              "url": {
+                "type": "string",
+                "description": "URL to navigate to"
+              },
+              "useMobileUrl": {
+                "type": "boolean",
+                "description": "Use mobile-optimized URL"
+              }
+            },
+            "required": [
+              "name",
+              "url",
+              "useMobileUrl"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "jest --passWithNoTests",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.6",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "fast-check": "^3.15.0"
+  }
+}
