@@ -210,6 +210,20 @@ npm test
 npm run package
 ```
 
+## Contributing
+
+Contributions are welcome! Visit the [GitHub repository](https://github.com/Prathmesh333/vsfeed) to:
+- Report bugs or issues
+- Suggest new features
+- Submit pull requests
+- View and contribute to the source code
+
+## Links
+
+- **GitHub Repository**: [https://github.com/Prathmesh333/vsfeed](https://github.com/Prathmesh333/vsfeed)
+- **Issue Tracker**: [https://github.com/Prathmesh333/vsfeed/issues](https://github.com/Prathmesh333/vsfeed/issues)
+- **VS Code Marketplace**: [VSFeed Extension](https://marketplace.visualstudio.com/items?itemName=PrathameshNikam.vsfeed)
+
 ## License
 
 MIT

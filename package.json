@@ -7,6 +7,14 @@
   "author": {
     "name": "Prathamesh Nikam"
   },
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/Prathmesh333/vsfeed"
+},
+"homepage": "https://github.com/Prathmesh333/vsfeed",
+"bugs": {
+  "url": "https://github.com/Prathmesh333/vsfeed/issues"
+},
   "icon": "logo-small.jpg",
   "license": "MIT",
   "keywords": [
