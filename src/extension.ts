@@ -18,6 +18,25 @@ let stateManager: StateManager;
 let focusController: FocusController;
 let activityMonitor: ActivityMonitor;
 let extensionContext: vscode.ExtensionContext;
+let suppressSessionCompletion = false;
+let activeDurationMinutes = 15;
+let closeTimer: ReturnType<typeof setTimeout> | undefined;
+
+function syncSession(): void {
+  browserManager.postMessageToWebView({ type: 'sessionState', active: focusController.isActive(), remaining: focusController.getRemainingTime(), duration: activeDurationMinutes });
+}
+
+function startBreak(minutes: number): void {
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) { return; }
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = undefined; }
+  suppressSessionCompletion = true;
+  focusController.endSession();
+  suppressSessionCompletion = false;
+  activeDurationMinutes = minutes;
+  browserManager.postMessageToWebView({ type: 'removeBlur' });
+  focusController.startSession(minutes);
+  syncSession();
+}
 
 /**
  * Extension activation function
@@ -64,6 +83,8 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate() {
   console.log('VSFeed extension is now deactivating');
 
+  if (closeTimer) { clearTimeout(closeTimer); }
+
   // Save current workspace state
   if (browserManager && stateManager) {
     await stateManager.saveState({
@@ -107,7 +128,7 @@ function wireComponents(): void {
   activityMonitor.setBreakSuggestionThreshold(initialConfig.breakSuggestions.codingThresholdMinutes);
 
   // Connect Configuration Manager to all components for settings updates
-  configManager.onConfigurationChanged(() => {
+  extensionContext.subscriptions.push(configManager.onConfigurationChanged(() => {
     const config = configManager.getConfig();
 
     // Update Focus Controller settings
@@ -119,12 +140,11 @@ function wireComponents(): void {
 
     // Update shortcut buttons in the browser panel
     browserManager.setPlatformShortcuts(getEffectiveShortcuts());
-  });
+  }));
 
   // Connect Focus Controller to Browser Manager for panel control
   focusController.onTimerTick((remaining) => {
-    const config = configManager.getConfig();
-    const total = config.focusMode.defaultDurationMinutes * 60;
+    const total = activeDurationMinutes * 60;
 
     // Send timer update to WebView
     browserManager.postMessageToWebView({
@@ -142,6 +162,8 @@ function wireComponents(): void {
   });
 
   focusController.onSessionEnd(async () => {
+    syncSession();
+    if (suppressSessionCompletion) { return; }
     const config = configManager.getConfig();
 
     // Apply blur effect if enabled
@@ -167,7 +189,8 @@ function wireComponents(): void {
     activityMonitor.updateLastBreakTime();
 
     // Hide panel after 2-second delay
-    setTimeout(() => {
+    closeTimer = setTimeout(() => {
+      closeTimer = undefined;
       browserManager.hidePanel();
     }, 2000);
   });
@@ -189,10 +212,30 @@ function wireComponents(): void {
 
       // Start focus mode with default duration
       const config = configManager.getConfig();
-      focusController.startSession(config.focusMode.defaultDurationMinutes);
+      startBreak(config.focusMode.defaultDurationMinutes);
 
       // Update last break time
       activityMonitor.updateLastBreakTime();
+    }
+  });
+
+  browserManager.onWebViewMessage('ready', () => {
+    browserManager.setPlatformShortcuts(getEffectiveShortcuts());
+    syncSession();
+  });
+  browserManager.onWebViewMessage('startBreak', message => {
+    if (message.type === 'startBreak') { startBreak(message.minutes); }
+  });
+  browserManager.onWebViewMessage('stopBreak', () => {
+    suppressSessionCompletion = true;
+    focusController.endSession();
+    suppressSessionCompletion = false;
+    browserManager.postMessageToWebView({ type: 'removeBlur' });
+    syncSession();
+  });
+  browserManager.onWebViewMessage('openSettings', message => {
+    if (message.type === 'openSettings') {
+      void vscode.commands.executeCommand('workbench.action.openSettings', message.section === 'browser' ? 'workbench.browser' : '@ext:PrathameshNikam.vsfeed');
     }
   });
 
@@ -242,7 +285,7 @@ function wireComponents(): void {
             browserManager.navigateToUrl(currentUrl);
           }
         } else if (selection === 'Report Issue') {
-          vscode.env.openExternal(vscode.Uri.parse('https://github.com/your-repo/vsfeed/issues'));
+          vscode.env.openExternal(vscode.Uri.parse('https://github.com/Prathmesh333/vsfeed/issues'));
         }
       });
     }
@@ -253,7 +296,9 @@ function wireComponents(): void {
       return;
     }
 
-    void saveCustomShortcut(message.shortcut);
+    void saveCustomShortcut(message.shortcut, message.shortcutId).catch(() => {
+      browserManager.postMessageToWebView({ type: 'showOverlay', title: 'Save failed', message: 'Could not save this site. Please try again.' });
+    });
   });
 
   browserManager.onWebViewMessage('removeShortcut', (message) => {
@@ -261,7 +306,9 @@ function wireComponents(): void {
       return;
     }
 
-    void removeCustomShortcut(message.shortcutId);
+    void removeCustomShortcut(message.shortcutId).catch(() => {
+      browserManager.postMessageToWebView({ type: 'showOverlay', title: 'Remove failed', message: 'Could not remove this site. Please try again.' });
+    });
   });
 }
 
@@ -305,7 +352,8 @@ function createShortcutId(): string {
   return `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function saveCustomShortcut(shortcut: PlatformShortcut): Promise<void> {
+async function saveCustomShortcut(shortcut: PlatformShortcut, shortcutId?: string): Promise<void> {
+  if (!shortcut || typeof shortcut.name !== 'string' || typeof shortcut.url !== 'string' || typeof shortcut.useMobileUrl !== 'boolean') { return; }
   const normalizedName = shortcut.name.trim();
   const normalizedUrl = shortcut.url.trim();
 
@@ -335,12 +383,14 @@ async function saveCustomShortcut(shortcut: PlatformShortcut): Promise<void> {
   }
 
   const customShortcuts = loadCustomShortcuts();
-  customShortcuts.push({
-    id: createShortcutId(),
-    name: normalizedName,
-    url: normalizedUrl,
-    useMobileUrl: shortcut.useMobileUrl
-  });
+  const entry: StoredShortcut = {
+    id: shortcutId ?? createShortcutId(), name: normalizedName, url: normalizedUrl, useMobileUrl: shortcut.useMobileUrl
+  };
+  if (shortcutId) {
+    const index = customShortcuts.findIndex(item => item.id === shortcutId);
+    if (index < 0) { return; }
+    customShortcuts[index] = entry;
+  } else { customShortcuts.push(entry); }
 
   await persistCustomShortcuts(customShortcuts);
   browserManager.setPlatformShortcuts(getEffectiveShortcuts());
@@ -386,7 +436,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
       // Start focus mode with default duration
       const config = configManager.getConfig();
-      focusController.startSession(config.focusMode.defaultDurationMinutes);
+      startBreak(config.focusMode.defaultDurationMinutes);
 
       vscode.window.showInformationMessage(
         `Focus mode started for ${config.focusMode.defaultDurationMinutes} minutes`
@@ -463,24 +513,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
     }
   );
 
-  // Command to clear cookies
-  const clearCookiesCommand = vscode.commands.registerCommand(
-    'vsfeed.clearCookies',
-    async () => {
-      const result = await vscode.window.showWarningMessage(
-        'This will clear all stored cookies and log you out of websites. Continue?',
-        'Clear Cookies',
-        'Cancel'
-      );
-
-      if (result === 'Clear Cookies') {
-        // Dispose and recreate panel to clear cookies
-        browserManager.disposePanel();
-        vscode.window.showInformationMessage('Cookies cleared successfully');
-      }
-    }
-  );
-
   // Command to reset extension state
   const resetStateCommand = vscode.commands.registerCommand(
     'vsfeed.resetState',
@@ -523,7 +555,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
     navigateForwardCommand,
     addCustomShortcutCommand,
     removeCustomShortcutCommand,
-    clearCookiesCommand,
     resetStateCommand,
     openPanelCommand,
     startFocusModeCommand

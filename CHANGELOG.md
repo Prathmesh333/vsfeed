@@ -1,6 +1,24 @@
-# Change Log
+# Changelog
 
-All notable changes to the VSFeed extension will be documented in this file.
+## [1.0.1]
+
+### Added
+
+- Add Home, Library, History, and Settings to the Compact Dock dashboard.
+- Add a site directory with 13 suggestions across Dev, Reading, and Social.
+- Add custom site editing, pins, and collections.
+- Save up to 200 successful launches. Add search, reopen, and clear controls.
+- Add break presets and a custom duration of 1 to 60 minutes.
+
+### Changed
+
+- Use the new browser-and-pause icon in the extension listing and launcher tab. Match the dashboard logo to the editor theme.
+- Restore the timer display when the dashboard reloads.
+- Remove unused embedded browser controls and settings.
+
+### Fixed
+
+- Keep the launcher open when a user ends or restarts a break manually.
 
 ## [1.0.0] - Marketplace Release
 

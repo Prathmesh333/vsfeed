@@ -1,8 +1,8 @@
 {
   "name": "vsfeed",
   "displayName": "VSFeed",
-  "description": "Doomscroll without leaving your code. A context-aware social feed for idle moments in Visual Studio Code.",
-  "version": "1.0.0",
+  "description": "Open saved websites, revisit recent launches, and take timed breaks inside Visual Studio Code.",
+  "version": "1.0.1",
   "publisher": "PrathameshNikam",
   "author": {
     "name": "Prathamesh Nikam"
@@ -15,7 +15,7 @@
 "bugs": {
   "url": "https://github.com/Prathmesh333/vsfeed/issues"
 },
-  "icon": "logo-small.jpg",
+  "icon": "media/vsfeed-icon.png",
   "license": "MIT",
   "keywords": [
     "feed",
@@ -28,7 +28,8 @@
     "distraction",
     "social media",
     "shortcuts",
-    "doomscroll"
+    "bookmarks",
+    "launch history"
   ],
   "engines": {
     "vscode": "^1.85.0"
@@ -69,10 +70,6 @@
       {
         "command": "vsfeed.removeCustomShortcut",
         "title": "VSFeed: Remove Custom Shortcut"
-      },
-      {
-        "command": "vsfeed.clearCookies",
-        "title": "VSFeed: Clear Cookies"
       },
       {
         "command": "vsfeed.resetState",
@@ -129,7 +126,7 @@
         "vsfeed.focusMode.enableBlurEffect": {
           "type": "boolean",
           "default": true,
-          "description": "Apply blur effect to browser panel when session timer expires"
+          "description": "Blur the VSFeed launcher when the break timer expires."
         },
         "vsfeed.focusMode.enableActivityPausing": {
           "type": "boolean",
@@ -147,48 +144,6 @@
           "minimum": 30,
           "maximum": 180,
           "description": "Duration of continuous coding before suggesting a break in minutes (30-180)"
-        },
-        "vsfeed.contentFilter.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable content filtering to hide distracting sections of websites"
-        },
-        "vsfeed.contentFilter.customRules": {
-          "type": "array",
-          "default": [],
-          "description": "Custom content filter rules per domain",
-          "items": {
-            "type": "object",
-            "properties": {
-              "domain": {
-                "type": "string",
-                "description": "Domain name (e.g., 'instagram.com')"
-              },
-              "selectors": {
-                "type": "array",
-                "description": "CSS selectors to hide",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "domain",
-              "selectors"
-            ]
-          }
-        },
-        "vsfeed.performance.preferMobileUrls": {
-          "type": "boolean",
-          "default": true,
-          "description": "Prefer mobile-optimized URLs for faster loading"
-        },
-        "vsfeed.performance.memoryLimitMB": {
-          "type": "number",
-          "default": 200,
-          "minimum": 50,
-          "maximum": 1000,
-          "description": "Memory limit for browser panel in megabytes (50-1000)"
         },
         "vsfeed.platformShortcuts": {
           "type": "array",

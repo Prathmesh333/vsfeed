@@ -1,10 +1,5 @@
 import * as vscode from 'vscode';
 
-export interface FilterRule {
-  domain: string;
-  selectors: string[];
-}
-
 export interface PlatformShortcut {
   name: string;
   url: string;
@@ -20,14 +15,6 @@ export interface ExtensionConfig {
   breakSuggestions: {
     enabled: boolean;
     codingThresholdMinutes: number;
-  };
-  contentFilter: {
-    enabled: boolean;
-    customRules: FilterRule[];
-  };
-  performance: {
-    preferMobileUrls: boolean;
-    memoryLimitMB: number;
   };
   platformShortcuts: PlatformShortcut[];
 }
@@ -58,21 +45,6 @@ export class ConfigurationManager {
           90
         ),
       },
-      contentFilter: {
-        enabled: config.get<boolean>('contentFilter.enabled', false),
-        customRules: this.validateFilterRules(
-          config.get<FilterRule[]>('contentFilter.customRules', [])
-        ),
-      },
-      performance: {
-        preferMobileUrls: config.get<boolean>('performance.preferMobileUrls', true),
-        memoryLimitMB: this.validateNumber(
-          config.get<number>('performance.memoryLimitMB', 200),
-          50,
-          1000,
-          200
-        ),
-      },
       platformShortcuts: this.validatePlatformShortcuts(
         config.get<PlatformShortcut[]>('platformShortcuts', this.getDefaultShortcuts())
       ),
@@ -97,30 +69,6 @@ export class ConfigurationManager {
       return defaultValue;
     }
     return value;
-  }
-
-  private validateFilterRules(rules: FilterRule[]): FilterRule[] {
-    if (!Array.isArray(rules)) {
-      return [];
-    }
-
-    return rules.filter((rule) => {
-      if (!rule.domain || typeof rule.domain !== 'string') {
-        vscode.window.showErrorMessage(
-          `Invalid filter rule: domain must be a non-empty string`
-        );
-        return false;
-      }
-
-      if (!Array.isArray(rule.selectors) || rule.selectors.length === 0) {
-        vscode.window.showErrorMessage(
-          `Invalid filter rule for domain ${rule.domain}: selectors must be a non-empty array`
-        );
-        return false;
-      }
-
-      return true;
-    });
   }
 
   private validatePlatformShortcuts(shortcuts: PlatformShortcut[]): PlatformShortcut[] {

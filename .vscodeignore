@@ -37,3 +37,11 @@ yarn.lock
 *.log
 *.vsix
 logo.png
+
+out/render-profile/**
+out/vsfeed-preview.html
+out/vsfeed-compact-dock.png
+
+logo-small.jpg
+out/vsfeed-header-logo.svg
+out/__pycache__/**

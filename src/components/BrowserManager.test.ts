@@ -69,7 +69,7 @@ describe('BrowserManager', () => {
     test('sets initial HTML content', () => {
       const panel = browserManager.createPanel(PanelPosition.Sidebar);
       
-      expect(panel.webview.html).toContain('VSFeed Launcher');
+      expect(panel.webview.html).toContain('<title>VSFeed</title>');
       expect(panel.webview.html).toContain('<!DOCTYPE html>');
     });
 
@@ -677,7 +677,7 @@ describe('BrowserManager', () => {
       const handler2 = jest.fn();
 
       browserManager.onWebViewMessage('navigationComplete', handler1);
-      browserManager.onWebViewMessage('filterApplied', handler2);
+      browserManager.onWebViewMessage('navigationFailed', handler2);
 
       const message1: WebViewMessage = {
         type: 'navigationComplete',
@@ -685,8 +685,8 @@ describe('BrowserManager', () => {
       };
 
       const message2: WebViewMessage = {
-        type: 'filterApplied',
-        elementCount: 5
+        type: 'navigationFailed',
+        error: 'Test failure'
       };
 
       const messageCallback = (panel.webview.onDidReceiveMessage as jest.Mock).mock.calls[0][0];
@@ -711,31 +711,30 @@ describe('BrowserManager', () => {
       expect(() => messageCallback(message)).not.toThrow();
     });
 
-    test('HTML content includes iframe for web content', () => {
+    test('Launcher does not embed a second browser', () => {
       const panel = browserManager.createPanel(PanelPosition.Sidebar);
       
-      expect(panel.webview.html).toContain('<iframe id="browser-iframe"');
-      expect(panel.webview.html).toContain('sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"');
+      expect(panel.webview.html).not.toContain('<iframe');
     });
 
     test('HTML content includes overlay div', () => {
       const panel = browserManager.createPanel(PanelPosition.Sidebar);
       
-      expect(panel.webview.html).toContain('<div id="overlay">');
+      expect(panel.webview.html).toContain('<dialog id="overlay">');
       expect(panel.webview.html).toContain('overlay-content');
     });
 
     test('HTML content includes timer display', () => {
       const panel = browserManager.createPanel(PanelPosition.Sidebar);
       
-      expect(panel.webview.html).toContain('<div id="timer-display">');
+      expect(panel.webview.html).toContain('id="timer-display"');
     });
 
-    test('HTML content includes CSP allowing external content', () => {
+    test('Launcher CSP blocks embedded frames', () => {
       const panel = browserManager.createPanel(PanelPosition.Sidebar);
       
       expect(panel.webview.html).toContain('Content-Security-Policy');
-      expect(panel.webview.html).toContain('frame-src https: http:');
+      expect(panel.webview.html).toContain("frame-src 'none'");
     });
 
     test('HTML content includes message handling script', () => {
@@ -746,7 +745,7 @@ describe('BrowserManager', () => {
       expect(panel.webview.html).toContain('shortcuts-container');
       expect(panel.webview.html).toContain('back-button');
       expect(panel.webview.html).toContain('forward-button');
-      expect(panel.webview.html).toContain('add-shortcut-button');
+      expect(panel.webview.html).toContain('library-add');
       expect(panel.webview.html).toContain('shortcut-modal-backdrop');
       expect(panel.webview.html).toContain('shortcut-save-button');
       expect(panel.webview.html).toContain('YouTube Shorts');
@@ -770,6 +769,8 @@ describe('BrowserManager', () => {
           {
             name: 'Example',
             url: 'https://example.com',
+            savedUrl: 'https://example.com',
+            useMobileUrl: false,
           },
         ],
       });
@@ -796,6 +797,8 @@ describe('BrowserManager', () => {
             id: 'shortcut-1',
             name: 'Docs',
             url: 'https://example.com',
+            savedUrl: 'https://example.com',
+            useMobileUrl: false,
             isRemovable: true,
           },
         ],

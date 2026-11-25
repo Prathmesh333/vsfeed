@@ -13,8 +13,6 @@ describe('ConfigurationManager', () => {
     expect(config).toBeDefined();
     expect(config.focusMode).toBeDefined();
     expect(config.breakSuggestions).toBeDefined();
-    expect(config.contentFilter).toBeDefined();
-    expect(config.performance).toBeDefined();
     expect(config.platformShortcuts).toBeDefined();
   });
 
@@ -31,20 +29,6 @@ describe('ConfigurationManager', () => {
 
     expect(config.breakSuggestions.enabled).toBe(true);
     expect(config.breakSuggestions.codingThresholdMinutes).toBe(90);
-  });
-
-  test('getConfig returns default content filter settings', () => {
-    const config = configManager.getConfig();
-
-    expect(config.contentFilter.enabled).toBe(false);
-    expect(config.contentFilter.customRules).toEqual([]);
-  });
-
-  test('getConfig returns default performance settings', () => {
-    const config = configManager.getConfig();
-
-    expect(config.performance.preferMobileUrls).toBe(true);
-    expect(config.performance.memoryLimitMB).toBe(200);
   });
 
   test('getConfig returns default platform shortcuts', () => {

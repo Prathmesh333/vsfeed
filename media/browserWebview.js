@@ -1,380 +1,322 @@
 (function () {
+  'use strict';
   const vscode = acquireVsCodeApi();
-  const welcomeScreen = document.getElementById('welcome-screen');
-  const shortcutsContainer = document.getElementById('shortcuts-container');
-  const timerDisplay = document.getElementById('timer-display');
-  const overlay = document.getElementById('overlay');
-  const overlayTitle = document.getElementById('overlay-title');
-  const overlayMessage = document.getElementById('overlay-message');
-  const overlayButton = document.getElementById('overlay-button');
-  const urlInput = document.getElementById('url-input');
-  const goButton = document.getElementById('go-button');
-  const backButton = document.getElementById('back-button');
-  const forwardButton = document.getElementById('forward-button');
-  const addShortcutButton = document.getElementById('add-shortcut-button');
-  const launcherStatus = document.getElementById('launcher-status');
-  const initialShortcutsElement = document.getElementById('vsfeed-shortcuts-data');
-  const shortcutModalBackdrop = document.getElementById('shortcut-modal-backdrop');
-  const shortcutNameInput = document.getElementById('shortcut-name-input');
-  const shortcutUrlInput = document.getElementById('shortcut-url-input');
-  const shortcutMobileToggle = document.getElementById('shortcut-mobile-toggle');
-  const shortcutModalError = document.getElementById('shortcut-modal-error');
-  const shortcutCancelButton = document.getElementById('shortcut-cancel-button');
-  const shortcutSaveButton = document.getElementById('shortcut-save-button');
-
-  let overlayAction = 'dismissOverlay';
-  let overlayActionUrl = null;
-  let launcherState = {
-    currentUrl: '',
-    canNavigateBack: false,
-    canNavigateForward: false,
-    isLaunching: false
-  };
+  const $ = id => document.getElementById(id);
+  const send = message => vscode.postMessage(message);
+  const saved = vscode.getState() || {};
+  let view = ['home', 'library', 'history', 'settings'].includes(saved.view) ? saved.view : 'home';
+  let group = 'All';
   let shortcuts = [];
+  let history = [];
+  let preferences = { groups: {}, pinned: [] };
+  let launching = false;
+  let active = false;
+  let overlayAction = 'dismissOverlay';
+  let query = '';
+  let returnFocus;
+  let editingId;
+  const icons = [
+    ['reddit.com', '●', '#f4501e'], ['x.com', '𝕏', '#171717'], ['twitter.com', '𝕏', '#171717'],
+    ['youtube.com', '▶', '#e62117'], ['instagram.com', '◎', '#b43886'],
+    ['ycombinator.com', 'Y', '#ec771c'], ['github.com', '⌘', '#555c68']
+  ];
+  const directory = {
+    Dev: [
+      ['GitHub', 'https://github.com'],
+      ['MDN Web Docs', 'https://developer.mozilla.org'],
+      ['Stack Overflow', 'https://stackoverflow.com'],
+      ['npm', 'https://www.npmjs.com'],
+      ['PyPI', 'https://pypi.org']
+    ],
+    Reading: [
+      ['Wikipedia', 'https://www.wikipedia.org'],
+      ['arXiv', 'https://arxiv.org'],
+      ['Lobsters', 'https://lobste.rs'],
+      ['Project Gutenberg', 'https://www.gutenberg.org']
+    ],
+    Social: [
+      ['LinkedIn', 'https://www.linkedin.com'],
+      ['Bluesky', 'https://bsky.app'],
+      ['Twitch', 'https://www.twitch.tv'],
+      ['Discord', 'https://discord.com/app']
+    ]
+  };
 
-  function parseInitialShortcuts() {
-    if (!initialShortcutsElement || !initialShortcutsElement.textContent) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(initialShortcutsElement.textContent);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+  function siteKey(value) {
+    const url = new URL(value);
+    return host(value) + (url.pathname.replace(/\/$/, '')) + url.search + url.hash;
   }
 
-  function hideOverlay() {
-    overlay.classList.remove('visible');
-    overlayAction = 'dismissOverlay';
-    overlayActionUrl = null;
-  }
-
-  function showOverlay(options) {
-    overlayTitle.textContent = options.title || 'VSFeed';
-    overlayMessage.textContent = options.message || '';
-    overlayButton.textContent = options.buttonLabel || 'Dismiss';
-    overlayAction = options.action || 'dismissOverlay';
-    overlayActionUrl = options.url || null;
-    overlay.classList.add('visible');
-  }
-
-  function normalizeUrl(url) {
-    const trimmed = url.trim();
-    if (!trimmed) {
-      return '';
+  function host(url) { try { return new URL(url).hostname.replace(/^(www\.|m\.|mobile\.)/, ''); } catch { return ''; } }
+  function icon(url) {
+    const domain = host(url);
+    const match = icons.find(item => domain === item[0] || domain.endsWith('.' + item[0]));
+    const node = document.createElement('span'); node.className = 'site-icon'; node.setAttribute('aria-hidden', 'true');
+    node.textContent = match ? match[1] : (domain[0] || '↗').toUpperCase();
+    if (match) { node.style.setProperty('--icon-color', match[2]); }
+    const drawings = {
+      'youtube.com': [['path', { d: 'M9 7l8 5-8 5z', fill: 'white', stroke: 'none' }]],
+      'instagram.com': [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 5 }], ['circle', { cx: 12, cy: 12, r: 4 }], ['circle', { cx: 17, cy: 7, r: 1, fill: 'white', stroke: 'none' }]],
+      'reddit.com': [['ellipse', { cx: 12, cy: 14, rx: 8, ry: 6 }], ['path', { d: 'M12 8l2-5 5 1M8 16q4 3 8 0' }], ['circle', { cx: 9, cy: 12, r: 1, fill: 'white' }], ['circle', { cx: 15, cy: 12, r: 1, fill: 'white' }], ['circle', { cx: 20, cy: 4, r: 2 }]]
+    };
+    if (match && drawings[match[0]]) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', '24'); svg.setAttribute('height', '24');
+      svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'white'); svg.setAttribute('stroke-width', '1.6');
+      drawings[match[0]].forEach(([tag, attrs]) => {
+        const shape = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        Object.entries(attrs).forEach(([key, value]) => shape.setAttribute(key, String(value))); svg.append(shape);
+      });
+      node.replaceChildren(svg);
     }
-
-    const hasProtocol = trimmed.indexOf('http://') === 0 || trimmed.indexOf('https://') === 0;
-    return hasProtocol ? trimmed : 'https://' + trimmed;
+    return node;
   }
-
-  function requestOpenUrl(url) {
-    if (launcherState.isLaunching) {
-      return;
-    }
-
-    urlInput.value = url;
-    hideOverlay();
-    launcherState.currentUrl = url;
-    launcherState.isLaunching = true;
-    updateControls();
-    vscode.postMessage({
-      type: 'openUrl',
-      url: url
+  function button(label, action, className) {
+    const node = document.createElement('button'); node.type = 'button'; node.textContent = label;
+    if (className) { node.className = className; } node.addEventListener('click', action); return node;
+  }
+  function empty(container, title, detail) {
+    const node = document.createElement('div'); node.className = 'empty';
+    const strong = document.createElement('strong'); strong.textContent = title;
+    node.append(strong, document.createTextNode(detail)); container.append(node);
+  }
+  function collection(site) {
+    if (preferences.groups[site.url]) { return preferences.groups[site.url]; }
+    const domain = host(site.url);
+    const suggested = Object.entries(directory).find(([, sites]) => sites.some(([, url]) => host(url) === domain));
+    if (suggested) { return suggested[0]; }
+    return /(^|\.)(github\.com|ycombinator\.com|stackoverflow\.com)$/.test(domain) ? 'Dev' :
+      /(^|\.)(reddit\.com|instagram\.com|x\.com|twitter\.com|youtube\.com)$/.test(domain) ? 'Social' : 'Reading';
+  }
+  function matches(site) { return (site.name + ' ' + site.url).toLowerCase().includes(query.toLowerCase()); }
+  function persistPreferences() { send({ type: 'savePreferences', preferences }); }
+  function openUrl(url) {
+    if (launching) { return; }
+    launching = true; updateBusy(); send({ type: 'openUrl', url });
+  }
+  function normalize(value) {
+    const trimmed = value.trim();
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : 'https://' + trimmed);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) { throw new Error('Enter an http or https URL.'); }
+    return url.href;
+  }
+  function setView(next) {
+    view = next;
+    document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + view; });
+    document.querySelectorAll('[data-view]').forEach(node => {
+      const selected = node.dataset.view === view; node.classList.toggle('active', selected);
+      if (selected) { node.setAttribute('aria-current', 'page'); } else { node.removeAttribute('aria-current'); }
+    });
+    $('search-section').hidden = view === 'settings';
+    $('url-input').placeholder = view === 'history' ? 'Search launch history' : 'Search saved sites or enter a URL';
+    vscode.setState({ view }); render();
+  }
+  function renderSites() {
+    const container = $('shortcuts-container'); container.replaceChildren();
+    const filtered = shortcuts.filter(site => matches(site) && (group === 'All' || collection(site) === group))
+      .sort((a, b) => Number(preferences.pinned.includes(b.url)) - Number(preferences.pinned.includes(a.url)));
+    filtered.forEach(site => {
+      const card = document.createElement('div'); card.className = 'site-card';
+      const node = button('', () => openUrl(site.url), 'site-button'); node.disabled = launching; node.title = 'Open ' + site.name;
+      const name = document.createElement('span'); name.className = 'site-name'; name.textContent = site.name;
+      node.append(icon(site.url), name); card.append(node); container.append(card);
+    });
+    const add = button('', () => openModal(), 'add-site');
+    const plus = document.createElement('span'); plus.textContent = '+';
+    const label = document.createElement('span'); label.textContent = 'Add site'; add.append(plus, label); container.append(add);
+    if (!filtered.length) { empty(container, 'No matching sites', 'Try another search or add a site.'); }
+    const chips = $('groups'); chips.replaceChildren();
+    ['All', 'Social', 'Dev', 'Reading'].forEach(name => {
+      const chip = button(name, () => { group = name; renderSites(); }, 'chip' + (group === name ? ' selected' : ''));
+      chip.setAttribute('aria-pressed', String(group === name)); chips.append(chip);
     });
   }
-
-  function renderShortcuts(nextShortcuts) {
-    shortcuts = nextShortcuts.slice();
-    shortcutsContainer.textContent = '';
-
-    shortcuts.forEach(function (shortcut) {
-      if (!shortcut || !shortcut.name || !shortcut.url) {
-        return;
+  function renderLibrary() {
+    const list = $('library-list'); list.replaceChildren();
+    shortcuts.filter(matches).forEach(site => {
+      const row = document.createElement('div'); row.className = 'row library-row';
+      const main = document.createElement('div'); main.className = 'row-main';
+      const link = button(site.name, () => openUrl(site.url), 'row-link'); link.disabled = launching;
+      const domain = document.createElement('small'); domain.textContent = host(site.url); main.append(link, domain);
+      const actions = document.createElement('div'); actions.className = 'row-actions';
+      const pinned = preferences.pinned.includes(site.url);
+      const pin = button(pinned ? '★ Pinned' : '☆ Pin', () => {
+        preferences.pinned = pinned ? preferences.pinned.filter(url => url !== site.url) : [...preferences.pinned, site.url];
+        persistPreferences(); render();
+      }); pin.setAttribute('aria-pressed', String(pinned));
+      const select = document.createElement('select'); select.setAttribute('aria-label', 'Collection for ' + site.name);
+      ['Social', 'Dev', 'Reading'].forEach(name => { const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option); });
+      select.value = collection(site); select.addEventListener('change', () => { preferences.groups[site.url] = select.value; persistPreferences(); renderSites(); });
+      actions.append(pin, select);
+      if (site.isRemovable && site.id) {
+        actions.append(button('Edit', () => openModal(site.savedUrl || site.url, site)));
+        actions.append(button('Remove', () => send({ type: 'removeShortcut', shortcutId: site.id })));
+      } else {
+        const edit = button('Edit', () => send({ type: 'openSettings', section: 'vsfeed' })); edit.title = 'Edit configured sites in VSFeed settings'; actions.append(edit);
       }
-
-      const card = document.createElement('div');
-      card.className = 'shortcut-card';
-
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'shortcut-button';
-      button.textContent = shortcut.name;
-      button.title = 'Open ' + shortcut.name + ' in a new integrated-browser tab';
-      button.disabled = launcherState.isLaunching;
-      button.addEventListener('click', function () {
-        requestOpenUrl(shortcut.url);
-      });
-      card.appendChild(button);
-
-      if (shortcut.isRemovable && shortcut.id) {
-        const removeButton = document.createElement('button');
-        removeButton.type = 'button';
-        removeButton.className = 'shortcut-remove-button';
-        removeButton.title = 'Remove ' + shortcut.name;
-        removeButton.textContent = 'x';
-        removeButton.addEventListener('click', function (event) {
-          event.stopPropagation();
-          vscode.postMessage({
-            type: 'removeShortcut',
-            shortcutId: shortcut.id
-          });
+      row.append(icon(site.url), main, actions); list.append(row);
+    });
+    if (!list.childElementCount) { empty(list, 'Your sites live here', 'Add a site or change your search.'); }
+  }
+  function renderDirectory() {
+    const list = $('directory-list');
+    list.replaceChildren();
+    const saved = new Set(shortcuts.flatMap(site => {
+      try { return [siteKey(site.savedUrl || site.url)]; } catch { return []; }
+    }));
+    for (const [category, entries] of Object.entries(directory)) {
+      const sites = entries.filter(([name, url]) => matches({ name, url }));
+      if (!sites.length) { continue; }
+      const heading = document.createElement('h2');
+      heading.className = 'directory-heading';
+      heading.textContent = category;
+      list.append(heading);
+      for (const [name, url] of sites) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const main = document.createElement('div');
+        main.className = 'row-main';
+        const open = button(name, () => openUrl(url), 'row-link');
+        open.disabled = launching;
+        const domain = document.createElement('small');
+        domain.textContent = host(url);
+        main.append(open, domain);
+        const added = saved.has(siteKey(url));
+        const add = button(added ? 'Saved' : '+ Save', () => {
+          add.disabled = true;
+          send({ type: 'saveShortcut', shortcut: { name, url, useMobileUrl: false } });
         });
-        card.appendChild(removeButton);
+        add.disabled = added;
+        add.setAttribute('aria-label', added ? name + ' is saved' : 'Save ' + name);
+        row.append(icon(url), main, add);
+        list.append(row);
       }
+    }
+    if (!list.childElementCount) {
+      empty(list, 'No matching sites', 'Try another search or add a custom URL.');
+    }
+  }
 
-      shortcutsContainer.appendChild(card);
+  function renderHistory(id, recent) {
+    const list = $(id); list.replaceChildren();
+    let entries = history.filter(entry => entry.url.toLowerCase().includes(query.toLowerCase()));
+    if (recent) { entries = entries.slice(0, 4); }
+    entries.forEach(entry => {
+      const row = document.createElement('div'); row.className = 'row';
+      const main = document.createElement('div'); main.className = 'row-main';
+      const site = shortcuts.find(item => host(item.url) === host(entry.url));
+      const link = button(site ? site.name : host(entry.url), () => openUrl(entry.url), 'row-link'); link.title = entry.url; link.disabled = launching;
+      const time = document.createElement('small'); time.textContent = new Date(entry.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      main.append(link, time); row.append(icon(entry.url), main);
+      const actions = document.createElement('div'); actions.className = 'row-actions';
+      const open = button('↗', () => openUrl(entry.url)); open.setAttribute('aria-label', 'Reopen ' + host(entry.url)); open.disabled = launching; actions.append(open);
+      if (!recent) { const remove = button('×', () => send({ type: 'deleteHistory', timestamp: entry.timestamp })); remove.setAttribute('aria-label', 'Remove launch of ' + host(entry.url)); actions.append(remove); }
+      row.append(actions); list.append(row);
     });
+    if (!list.childElementCount) { empty(list, query ? 'No matching launches' : 'Your next break starts here', query ? 'Try another search.' : 'Open a site and it will appear here.'); }
+    $('clear-history').disabled = !history.length;
   }
-
-  function clearShortcutModalError() {
-    shortcutModalError.textContent = '';
+  function render() { renderSites(); renderLibrary(); renderDirectory(); renderHistory('recent-list', true); renderHistory('history-list', false); }
+  function updateBusy() {
+    $('go-button').disabled = launching;
+    $('launcher-status').textContent = launching ? 'Opening in integrated browser…' : '';
+    render();
   }
-
-  function openShortcutModal(initialUrl) {
-    const suggestedUrl = initialUrl || urlInput.value.trim() || launcherState.currentUrl || '';
-    shortcutNameInput.value = '';
-    shortcutUrlInput.value = suggestedUrl;
-    shortcutMobileToggle.checked = true;
-    clearShortcutModalError();
-    shortcutModalBackdrop.classList.add('visible');
-    setTimeout(function () {
-      shortcutNameInput.focus();
-    }, 0);
+  function openModal(initialUrl, site) {
+    editingId = site && site.id;
+    $('shortcut-modal-title').textContent = site ? 'Edit site' : 'Add a site';
+    returnFocus = document.activeElement;
+    $('shortcut-name-input').value = site ? site.name : ''; $('shortcut-url-input').value = initialUrl || '';
+    $('shortcut-mobile-toggle').checked = !!(site && site.useMobileUrl); $('shortcut-modal-error').textContent = '';
+    if (!$('shortcut-modal-backdrop').open) { $('shortcut-modal-backdrop').showModal(); }
+    $('shortcut-name-input').focus();
   }
-
-  function closeShortcutModal() {
-    shortcutModalBackdrop.classList.remove('visible');
-    clearShortcutModalError();
-  }
-
-  function saveShortcutFromModal() {
-    const name = shortcutNameInput.value.trim();
-    const url = normalizeUrl(shortcutUrlInput.value);
-
-    if (!name) {
-      shortcutModalError.textContent = 'Enter a name for this quick-access item.';
-      shortcutNameInput.focus();
-      return;
-    }
-
-    if (!url) {
-      shortcutModalError.textContent = 'Enter a URL to save.';
-      shortcutUrlInput.focus();
-      return;
-    }
-
+  $('shortcut-cancel-button').addEventListener('click', () => $('shortcut-modal-backdrop').close());
+  $('shortcut-modal-backdrop').addEventListener('close', () => { if (returnFocus) { returnFocus.focus(); } });
+  $('shortcut-form').addEventListener('submit', event => {
+    event.preventDefault();
     try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        throw new Error('Invalid protocol');
-      }
-    } catch {
-      shortcutModalError.textContent = 'Enter a valid http or https URL.';
-      shortcutUrlInput.focus();
-      return;
-    }
-
-    closeShortcutModal();
-    vscode.postMessage({
-      type: 'saveShortcut',
-      shortcut: {
-        name: name,
-        url: url,
-        useMobileUrl: shortcutMobileToggle.checked
-      }
-    });
+      const name = $('shortcut-name-input').value.trim();
+      if (!name) { throw new Error('Enter a name for this site.'); }
+      const url = normalize($('shortcut-url-input').value);
+      send({ type: 'saveShortcut', shortcutId: editingId, shortcut: { name, url, useMobileUrl: $('shortcut-mobile-toggle').checked } });
+      $('shortcut-modal-backdrop').close();
+    } catch (error) { $('shortcut-modal-error').textContent = error.message; }
+  });
+  $('search-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (view === 'history' || !query.trim()) { return; }
+    const exact = shortcuts.find(site => site.name.toLowerCase() === query.trim().toLowerCase());
+    const filtered = shortcuts.filter(matches);
+    if (exact) { openUrl(exact.url); return; }
+    if (filtered.length === 1 && !query.includes('.')) { openUrl(filtered[0].url); return; }
+    try { openUrl(normalize(query)); } catch (error) { $('launcher-status').textContent = error.message; }
+  });
+  $('url-input').addEventListener('input', () => { query = $('url-input').value; if (view === 'library' && query.trim()) { $('site-directory').open = true; } render(); });
+  document.querySelectorAll('[data-view]').forEach(node => node.addEventListener('click', () => setView(node.dataset.view)));
+  document.querySelector('.brand').addEventListener('click', event => { event.preventDefault(); setView('home'); });
+  $('edit-shortcuts').addEventListener('click', () => setView('library'));
+  $('library-add').addEventListener('click', () => openModal());
+  $('view-all-history').addEventListener('click', () => setView('history'));
+  $('settings-history').addEventListener('click', () => setView('history'));
+  $('clear-history').addEventListener('click', () => {
+    overlayAction = 'clearHistory'; $('overlay-title').textContent = 'Clear launch history?';
+    $('overlay-message').textContent = 'This removes VSFeed’s saved launches. Browser history and cookies stay unchanged.';
+    $('overlay-button').textContent = 'Clear history'; $('overlay').showModal();
+  });
+  $('extension-settings').addEventListener('click', () => send({ type: 'openSettings', section: 'vsfeed' }));
+  $('browser-settings').addEventListener('click', () => send({ type: 'openSettings', section: 'browser' }));
+  const breakPreset = $('break-duration');
+  const customDuration = $('custom-break-duration');
+  breakPreset.addEventListener('change', () => {
+    customDuration.hidden = breakPreset.value !== 'custom';
+    if (!customDuration.hidden) { customDuration.focus(); }
+  });
+  $('start-break').addEventListener('click', () => {
+    if (active) { send({ type: 'stopBreak' }); return; }
+    if (breakPreset.value === 'custom' && !customDuration.reportValidity()) { return; }
+    const minutes = breakPreset.value === 'custom' ? customDuration.valueAsNumber : Number(breakPreset.value);
+    send({ type: 'startBreak', minutes });
+  });
+  customDuration.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { $('start-break').click(); }
+  });
+  $('back-button').addEventListener('click', () => send({ type: 'navigateBack' }));
+  $('forward-button').addEventListener('click', () => send({ type: 'navigateForward' }));
+  $('overlay-button').addEventListener('click', () => {
+    $('overlay').close();
+    if (overlayAction === 'clearHistory') { send({ type: 'clearHistory' }); }
+    else if (overlayAction === 'resumeCoding') { send({ type: 'userAction', action: 'resumeCoding' }); }
+  });
+  function session(isActive, remaining) {
+    active = isActive; $('start-break').textContent = active ? 'End break' : '▶ Start break';
+    breakPreset.hidden = active;
+    customDuration.hidden = active || breakPreset.value !== 'custom';
+    $('timer-display').textContent = active ? Math.floor(remaining / 60) + ':' + String(remaining % 60).padStart(2, '0') : '';
+    if (!active) { $('timer-display').classList.remove('warning'); }
   }
-
-  goButton.addEventListener('click', function () {
-    if (launcherState.isLaunching) {
-      return;
-    }
-
-    const url = normalizeUrl(urlInput.value);
-    if (!url) {
-      updateControls();
-      return;
-    }
-
-    requestOpenUrl(url);
-  });
-
-  backButton.addEventListener('click', function () {
-    if (backButton.disabled) {
-      return;
-    }
-
-    launcherState.isLaunching = true;
-    updateControls();
-    vscode.postMessage({
-      type: 'navigateBack'
-    });
-  });
-
-  forwardButton.addEventListener('click', function () {
-    if (forwardButton.disabled) {
-      return;
-    }
-
-    launcherState.isLaunching = true;
-    updateControls();
-    vscode.postMessage({
-      type: 'navigateForward'
-    });
-  });
-
-  addShortcutButton.addEventListener('click', function () {
-    openShortcutModal(normalizeUrl(urlInput.value));
-  });
-
-  shortcutCancelButton.addEventListener('click', function () {
-    closeShortcutModal();
-  });
-
-  shortcutSaveButton.addEventListener('click', function () {
-    saveShortcutFromModal();
-  });
-
-  shortcutModalBackdrop.addEventListener('click', function (event) {
-    if (event.target === shortcutModalBackdrop) {
-      closeShortcutModal();
-    }
-  });
-
-  urlInput.addEventListener('keypress', function (event) {
-    if (event.key === 'Enter') {
-      goButton.click();
-    }
-  });
-
-  urlInput.addEventListener('input', function () {
-    updateControls();
-  });
-
-  shortcutNameInput.addEventListener('keypress', function (event) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveShortcutFromModal();
-    }
-  });
-
-  shortcutUrlInput.addEventListener('keypress', function (event) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveShortcutFromModal();
-    }
-  });
-
-  window.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && shortcutModalBackdrop.classList.contains('visible')) {
-      closeShortcutModal();
-    }
-  });
-
-  window.addEventListener('message', function (event) {
+  window.addEventListener('message', event => {
     const message = event.data || {};
-
     switch (message.type) {
-      case 'navigate':
-        launcherState.currentUrl = message.url || '';
-        urlInput.value = launcherState.currentUrl;
-        updateControls();
-        break;
-
-      case 'updateTimer':
-        updateTimer(message.remaining);
-        break;
-
-      case 'showWarning':
-        timerDisplay.classList.add('warning');
-        break;
-
-      case 'applyBlur':
-        welcomeScreen.classList.add('blur-effect');
-        break;
-
-      case 'removeBlur':
-        welcomeScreen.classList.remove('blur-effect');
-        break;
-
-      case 'showOverlay':
-        showOverlay(message);
-        break;
-
-      case 'showAddShortcutModal':
-        openShortcutModal(normalizeUrl(message.initialUrl || ''));
-        break;
-
-      case 'updateShortcuts':
-        renderShortcuts(Array.isArray(message.shortcuts) ? message.shortcuts : []);
-        updateControls();
-        break;
-
+      case 'updateShortcuts': shortcuts = message.shortcuts || []; render(); break;
+      case 'dashboardState': history = message.history; preferences = message.preferences; render(); break;
+      case 'sessionState': session(message.active, message.remaining); break;
+      case 'updateTimer': session(true, message.remaining); break;
       case 'updateNavigationState':
-        launcherState.currentUrl = message.currentUrl || '';
-        launcherState.canNavigateBack = Boolean(message.canNavigateBack);
-        launcherState.canNavigateForward = Boolean(message.canNavigateForward);
-        launcherState.isLaunching = Boolean(message.isLaunching);
-        updateControls();
-        break;
-
-      case 'applyContentFilter':
-        break;
-
-      default:
-        break;
+        launching = !!message.isLaunching;
+        $('back-button').disabled = launching || !message.canNavigateBack;
+        $('forward-button').disabled = launching || !message.canNavigateForward; updateBusy(); break;
+      case 'showWarning': $('timer-display').classList.add('warning'); break;
+      case 'applyBlur': $('welcome-screen').classList.add('blur-effect'); session(false, 0); break;
+      case 'removeBlur': $('welcome-screen').classList.remove('blur-effect'); break;
+      case 'showAddShortcutModal': openModal(message.initialUrl); break;
+      case 'showOverlay':
+        overlayAction = message.action || 'dismissOverlay'; $('overlay-title').textContent = message.title || 'VSFeed';
+        $('overlay-message').textContent = message.message; $('overlay-button').textContent = message.buttonLabel || 'Dismiss';
+        if (!$('overlay').open) { $('overlay').showModal(); } break;
     }
   });
-
-  overlayButton.addEventListener('click', function () {
-    const action = overlayAction;
-    hideOverlay();
-
-    if (action === 'resumeCoding' || action === 'openExternal') {
-      vscode.postMessage({
-        type: 'userAction',
-        action: action,
-        url: overlayActionUrl || undefined
-      });
-    }
-  });
-
-  function updateTimer(remaining) {
-    const minutes = Math.floor(remaining / 60);
-    const seconds = remaining % 60;
-    timerDisplay.textContent = minutes + ':' + String(seconds).padStart(2, '0');
-    timerDisplay.classList.add('visible');
-  }
-
-  function updateControls() {
-    const hasInput = Boolean(urlInput.value.trim());
-
-    backButton.disabled = launcherState.isLaunching || !launcherState.canNavigateBack;
-    forwardButton.disabled = launcherState.isLaunching || !launcherState.canNavigateForward;
-    goButton.disabled = launcherState.isLaunching || !hasInput;
-    addShortcutButton.disabled = launcherState.isLaunching;
-    goButton.textContent = launcherState.isLaunching ? 'Opening...' : 'Go';
-
-    shortcutsContainer.querySelectorAll('.shortcut-button').forEach(function (button) {
-      button.disabled = launcherState.isLaunching;
-    });
-
-    if (launcherState.isLaunching) {
-      launcherStatus.textContent = 'Opening a new integrated-browser tab...';
-      return;
-    }
-
-    if (shortcuts.length > 0) {
-      launcherStatus.textContent = 'Quick access stays inside VSFeed. Use + to save bookmarks and x to remove your own.';
-      return;
-    }
-
-    launcherStatus.textContent = 'Use + to save bookmark-like quick access inside VSFeed.';
-  }
-
-  renderShortcuts(parseInitialShortcuts());
-  updateControls();
+  try { shortcuts = JSON.parse($('vsfeed-shortcuts-data').textContent); } catch { shortcuts = []; }
+  $('back-button').disabled = true; $('forward-button').disabled = true;
+  setView(view); send({ type: 'ready' });
 }());

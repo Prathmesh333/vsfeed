@@ -1,15 +1,20 @@
-import { FilterRule } from '../components/ConfigurationManager';
 
 export interface WebviewShortcut {
   id?: string;
   name: string;
   url: string;
   isRemovable?: boolean;
+  savedUrl?: string;
+  useMobileUrl?: boolean;
 }
+
+export interface LaunchEntry { url: string; timestamp: number; }
+export interface DashboardPreferences { groups: Record<string, string>; pinned: string[]; }
 
 // Extension -> WebView messages
 export type ExtensionMessage =
-  | { type: 'applyContentFilter'; rules: FilterRule[] }
+  | { type: 'dashboardState'; history: LaunchEntry[]; preferences: DashboardPreferences }
+  | { type: 'sessionState'; active: boolean; remaining: number; duration: number }
   | { type: 'updateTimer'; remaining: number; total: number }
   | { type: 'showWarning' }
   | { type: 'applyBlur' }
@@ -34,11 +39,19 @@ export type ExtensionMessage =
 
 // WebView -> Extension messages
 export type WebViewMessage =
+  | { type: 'ready' }
+  | { type: 'clearHistory' }
+  | { type: 'deleteHistory'; timestamp: number }
+  | { type: 'savePreferences'; preferences: DashboardPreferences }
+  | { type: 'startBreak'; minutes: number }
+  | { type: 'stopBreak' }
+  | { type: 'openSettings'; section: 'vsfeed' | 'browser' }
   | { type: 'openUrl'; url: string }
   | { type: 'navigateBack' }
   | { type: 'navigateForward' }
   | {
       type: 'saveShortcut';
+      shortcutId?: string;
       shortcut: {
         name: string;
         url: string;
@@ -48,7 +61,6 @@ export type WebViewMessage =
   | { type: 'removeShortcut'; shortcutId: string }
   | { type: 'navigationComplete'; url: string }
   | { type: 'navigationFailed'; error: string }
-  | { type: 'filterApplied'; elementCount: number }
   | {
       type: 'userAction';
       action: 'endSession' | 'resumeCoding' | 'openExternal';
